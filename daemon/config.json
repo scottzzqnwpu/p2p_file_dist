@@ -1,0 +1,10 @@
+{
+    "monitor_paths": [
+      {
+        "hdfs_path": "/dicts/dict_a",
+        "local_path": "./data/dict_a"
+      }
+    ],
+    "check_interval_seconds": 300
+  }
+  
