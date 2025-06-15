@@ -1,0 +1,101 @@
+version: "3"
+services:
+  redis:
+    image: redis:6-alpine
+    container_name: redis
+    command: >
+      --requirepass dragonfly
+    healthcheck:
+      test: ["CMD", "redis-cli","-a","dragonfly","ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    ports:
+      - 6379:6379
+
+  mysql:
+    image: mariadb:10.6
+    container_name: mysql
+    environment:
+      - MARIADB_USER=dragonfly
+      - MARIADB_PASSWORD=dragonfly
+      - MARIADB_DATABASE=manager
+      - MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=yes
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin status"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    ports:
+      - 3306:3306
+
+  manager:
+    image: dragonflyoss/manager:v2.0.3
+    container_name: manager
+    depends_on:
+      - redis
+      - mysql
+    restart: always
+    volumes:
+      - ./log/dragonfly:/var/log/dragonfly
+      - ./config/manager.yaml:/etc/dragonfly/manager.yaml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "/bin/grpc_health_probe -addr=:65003 || exit 1"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    ports:
+      - 65003:65003
+      - 8080:8080
+
+  dfdaemon:
+    image: dragonflyoss/dfdaemon:v2.0.3
+    depends_on:
+      - manager
+      - scheduler
+      - seed-peer
+    container_name: dfdaemon
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "/bin/grpc_health_probe -addr=:65000 || exit 1"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - ./log/dragonfly/dfdaemon:/var/log/dragonfly
+      - ./config/dfget.yaml:/etc/dragonfly/dfget.yaml:ro
+
+  scheduler:
+    image: dragonflyoss/scheduler:v2.0.3
+    depends_on:
+      - manager
+    container_name: scheduler
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "/bin/grpc_health_probe -addr=:8002 || exit 1"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    ports:
+      - 8002:8002
+    volumes:
+      - ./log/dragonfly:/var/log/dragonfly
+      - ./config/scheduler.yaml:/etc/dragonfly/scheduler.yaml:ro
+
+  seed-peer:
+    image: dragonflyoss/dfdaemon:v2.0.3
+    depends_on:
+      - manager
+      - scheduler
+    container_name: seed-peer
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "/bin/grpc_health_probe -addr=:65100 || exit 1"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    ports:
+      - 65100:65100
+    volumes:
+      - ./log/dragonfly/seed-peer:/var/log/dragonfly
+      - ./config/seed-peer.yaml:/etc/dragonfly/dfget.yaml:ro
